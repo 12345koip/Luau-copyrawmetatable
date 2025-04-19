@@ -130,7 +130,7 @@ local function isMetatableProtected(target: Instance|any): boolean
 	return (not success and string.match(err:lower(), "protected metatable") ~= nil)
 end
 
---Returns the real metatable of <code>target</code>, bypassing any metamethods.
+--Returns the real metatable of <code>target</code>, bypassing the <code>__metatable</code> metamethod.
 local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
 	local metatable do --get the metatable
 		--if its an instance, return its core metamethods (__index, __newindex and __namecall)
