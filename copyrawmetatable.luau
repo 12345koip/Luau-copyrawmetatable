@@ -1,7 +1,15 @@
 --module by 12345koip
 --retrieves a metatable regardless of the __metatable field
---view full license on the GitHub, full explanation on the DevForum
---THIS HAS SOME LIMITATIONS!!!
+--view full license on the GitHub
+
+--[[
+TODO:
+* Bypass __type hooks for instance metamethods
+
+DETECTION FOUND:
+- Hooked __namecall will C stack overflow with coroutine method
+- Non-hooked __namecall will error with "missing argument #1 (Instance expected)"
+]]
 
 --temporary results table to store retrieved metamethods
 local results = {}
@@ -113,6 +121,21 @@ local userdata, metamethodRetrievers, userdataMt do
 	end
 end
 
+--all the characters that can be used to generate a valid key
+local characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_"
+
+--get a random key to make it harder to metamethod hide
+local function getkey()
+	local password = ""
+	
+	for i = 1, math.random(45, 75), 1 do --make it between 45 and 75 characters long
+		local key = math.random(1, #characters)
+		password ..= string.sub(characters, key, key)
+	end
+	
+	return password
+end
+
 --checks to see if a table has a protected metatable or not
 local function isMetatableProtected(target: Instance|any): boolean
 	--attempt to overwrite the metatable with another value. If it errors, the metatable is protected.
@@ -130,15 +153,37 @@ local function isMetatableProtected(target: Instance|any): boolean
 	return (not success and string.match(err:lower(), "protected metatable") ~= nil)
 end
 
---Returns the real metatable of <code>target</code>, bypassing the <code>__metatable</code> metamethod.
+--checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
+local function isInstance(target: any): boolean
+	--get what is expected to be __namecall
+	local __nc = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end))
+	
+	--doesn't matter if __namecall is hooked, wrapping it 198 times and calling it again will C stack overflow if it is hooked
+	--tables don't have __namecall so that can't be hooked either
+	for i = 1, 198, 1 do
+		__nc = coroutine.wrap(__nc)
+	end
+	
+	--try to call it again
+	local errorMsg = select(2, pcall(__nc))
+	
+	--if it stack overflowed, it was an instance. Or, if it said invalid arg, it's also an instance. Only instances have __namecall.
+	if (errorMsg:match("C stack overflow") or errorMsg:match("missing argument #1 %(Instance expected%)")) then
+		return true
+	elseif (errorMsg:match("attempt to call missing method ['%w_]+ of table")) then --it was a table
+		return false
+	end
+end
+
+--Returns the real metatable of <code>target</code>, bypassing any metamethods.
 local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
 	local metatable do --get the metatable
-		--if its an instance, return its core metamethods (__index, __newindex and __namecall)
-		if (typeof(target) == "Instance") then
+		--if its an instance, return its core metamethods (__index, __newindex, __type and __namecall)
+		if (isInstance(target)) then
 			metatable = {
-				__index = select(2, xpcall(function() return target.____ end, function() return debug.info(2, "f") end)),
-				__newindex = select(2, xpcall(function() target.____ = nil end, function() return debug.info(2, "f") end)),
-				__namecall = select(2, xpcall(function() return target:____() end, function() return debug.info(2, "f") end)),
+				__index = select(2, xpcall(function() return target[getkey()] end, function() return debug.info(2, "f") end)),
+				__newindex = select(2, xpcall(function() target[getkey()] = nil end, function() return debug.info(2, "f") end)),
+				__namecall = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end)),
 				__type = typeof(target)
 			}
 		elseif (typeof(target) == "table") then --table or proxy
