@@ -2,15 +2,6 @@
 --retrieves a metatable regardless of the __metatable field
 --view full license on the GitHub
 
---[[
-TODO:
-* Bypass __type hooks for instance metamethods
-
-DETECTION FOUND:
-- Hooked __namecall will C stack overflow with coroutine method
-- Non-hooked __namecall will error with "missing argument #1 (Instance expected)"
-]]
-
 --temporary results table to store retrieved metamethods
 local results = {}
 
@@ -165,7 +156,7 @@ local function isInstance(target: any): boolean
 	end
 	
 	--try to call it again
-	local errorMsg = select(2, pcall(__nc))
+	local errorMsg = pcall(__nc)
 	
 	--if it stack overflowed, it was an instance. Or, if it said invalid arg, it's also an instance. Only instances have __namecall.
 	if (errorMsg:match("C stack overflow") or errorMsg:match("missing argument #1 %(Instance expected%)")) then
@@ -229,7 +220,7 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
 	
 	table.clear(results) --remove the metamethod from results table
 	
-	return metatable --return the raw metatable
+	return table.freeze(metatable) --return the raw metatable
 end
 
 return copyrawmetatable
