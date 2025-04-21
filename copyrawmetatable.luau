@@ -2,6 +2,15 @@
 --retrieves a metatable regardless of the __metatable field
 --view full license on the GitHub
 
+--[[
+TODO:
+* Bypass __type hooks for instance metamethods
+
+DETECTION FOUND:
+- Hooked __namecall will C stack overflow with coroutine method
+- Non-hooked __namecall will error with "missing argument #1 (Instance expected)"
+]]
+
 --temporary results table to store retrieved metamethods
 local results = {}
 
@@ -210,6 +219,8 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
 				metatable[name] = metamethod --store the metamethod
 			end
 			
+			return table.freeze(metatable)
+			
 		else --invalid target
 			error(
 				target ~= nil and "invalid argument #1 to 'copyrawmetatable' (Instance or table expected, got "..typeof(target)..")"
@@ -220,7 +231,7 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
 	
 	table.clear(results) --remove the metamethod from results table
 	
-	return table.freeze(metatable) --return the raw metatable
+	return metatable --return the raw metatable
 end
 
 return copyrawmetatable
