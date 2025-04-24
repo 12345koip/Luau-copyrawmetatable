@@ -191,7 +191,6 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetam
 				if (k ~= "__type" and k ~= "__metatable" and typeof(v) ~= "function") then
 					metatable[k] = nil
 				elseif (k ~= "__type" and k ~= "__metatable" and select(2, pcall(v)):match("%u?%l?%d[%u%l%d_]+")) then
-					warn("nope")
 					metatable[k] = nil
 				end
 			end
