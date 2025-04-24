@@ -2,15 +2,6 @@
 --retrieves a metatable regardless of the __metatable field
 --view full license on the GitHub
 
---[[
-TODO:
-* Bypass __type hooks for instance metamethods
-
-DETECTION FOUND:
-- Hooked __namecall will C stack overflow with coroutine method
-- Non-hooked __namecall will error with "missing argument #1 (Instance expected)"
-]]
-
 --temporary results table to store retrieved metamethods
 local results = {}
 
@@ -154,7 +145,7 @@ local function isMetatableProtected(target: Instance|any): boolean
 end
 
 --checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
-local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> ()): boolean
+local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> ()?): boolean
 	--get what is expected to be __namecall
 	local __nc = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end))
 	
@@ -168,7 +159,7 @@ local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> (
 	local errorMsg = select(2, pcall(__nc))
 	
 	--check for a suspicious error message - detect sethiddenstack
-	local suspiciousMatch = errorMsg:match("[%a%A%d%w_]+")
+	local suspiciousMatch = errorMsg:match("%u?%l?%d[%u%l%d_]+")
 	
 	--if it stack overflowed, it was an instance. Or, if it said invalid arg, it's also an instance. Only instances have __namecall.
 	if (errorMsg:match("C stack overflow") or errorMsg:match("missing argument #1 %(Instance expected%)")) then
@@ -177,15 +168,12 @@ local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> (
 		return false
 	elseif (suspiciousMatch and #suspiciousMatch > 5) then
 		if (onHiddenMetamethodDetected) then onHiddenMetamethodDetected(suspiciousMatch) end
-		return -1
+		return true
 	end
 end
 
 --Returns the real metatable of <code>target</code>, bypassing any metamethods.
-local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetamethodDetected: (string) -> ()): {[any]: any}
-	if (not onHiddenMetamethodDetected or typeof(onHiddenMetamethodDetected) ~= "function") then
-		error("invalid argument #2 to 'copyrawmetatable' (function expected, got "..typeof(onHiddenMetamethodDetected))
-	end
+local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetamethodDetected: (string) -> ()?): {[any]: any}
 	
 	local metatable do --get the metatable
 		--if its an instance, return its core metamethods (__index, __newindex, __type and __namecall)
@@ -197,6 +185,17 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetam
 				__namecall = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end)),
 				__type = typeof(target)
 			}
+			
+			--if the expected functions aren't the expected functions, leave them out
+			for k, v in metatable do
+				if (k ~= "__type" and k ~= "__metatable" and typeof(v) ~= "function") then
+					metatable[k] = nil
+				elseif (k ~= "__type" and k ~= "__metatable" and select(2, pcall(v)):match("%u?%l?%d[%u%l%d_]+")) then
+					warn("nope")
+					metatable[k] = nil
+				end
+			end
+			
 		elseif (typeof(target) == "table" and typeof(isInstance) == "boolean") then --table or proxy
 			--check if the metatable is protected. if not, just return it like that
 			if (not isMetatableProtected(target)) then
