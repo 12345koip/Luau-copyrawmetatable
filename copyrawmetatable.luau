@@ -154,7 +154,7 @@ local function isMetatableProtected(target: Instance|any): boolean
 end
 
 --checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
-local function isInstance(target: any): boolean
+local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> ()): boolean
 	--get what is expected to be __namecall
 	local __nc = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end))
 	
@@ -165,28 +165,39 @@ local function isInstance(target: any): boolean
 	end
 	
 	--try to call it again
-	local errorMsg = pcall(__nc)
+	local errorMsg = select(2, pcall(__nc))
+	
+	--check for a suspicious error message - detect sethiddenstack
+	local suspiciousMatch = errorMsg:match("[%a%A%d%w_]+")
 	
 	--if it stack overflowed, it was an instance. Or, if it said invalid arg, it's also an instance. Only instances have __namecall.
 	if (errorMsg:match("C stack overflow") or errorMsg:match("missing argument #1 %(Instance expected%)")) then
 		return true
 	elseif (errorMsg:match("attempt to call missing method ['%w_]+ of table")) then --it was a table
 		return false
+	elseif (suspiciousMatch and #suspiciousMatch > 5) then
+		if (onHiddenMetamethodDetected) then onHiddenMetamethodDetected(suspiciousMatch) end
+		return -1
 	end
 end
 
 --Returns the real metatable of <code>target</code>, bypassing any metamethods.
-local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
+local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetamethodDetected: (string) -> ()): {[any]: any}
+	if (not onHiddenMetamethodDetected or typeof(onHiddenMetamethodDetected) ~= "function") then
+		error("invalid argument #2 to 'copyrawmetatable' (function expected, got "..typeof(onHiddenMetamethodDetected))
+	end
+	
 	local metatable do --get the metatable
 		--if its an instance, return its core metamethods (__index, __newindex, __type and __namecall)
-		if (isInstance(target)) then
+		local isInstance = isInstance(target, onHiddenMetamethodDetected)
+		if (isInstance and typeof(isInstance) == "boolean") then
 			metatable = {
 				__index = select(2, xpcall(function() return target[getkey()] end, function() return debug.info(2, "f") end)),
 				__newindex = select(2, xpcall(function() target[getkey()] = nil end, function() return debug.info(2, "f") end)),
 				__namecall = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end)),
 				__type = typeof(target)
 			}
-		elseif (typeof(target) == "table") then --table or proxy
+		elseif (typeof(target) == "table" and typeof(isInstance) == "boolean") then --table or proxy
 			--check if the metatable is protected. if not, just return it like that
 			if (not isMetatableProtected(target)) then
 				return getmetatable(target)
@@ -220,6 +231,9 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}): {[any]: any}
 			end
 			
 			return table.freeze(metatable)
+			
+		elseif (isInstance == -1 and typeof(isInstance) == "number") then --suspicious call stack error
+			return
 			
 		else --invalid target
 			error(
