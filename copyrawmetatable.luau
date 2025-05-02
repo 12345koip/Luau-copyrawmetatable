@@ -145,7 +145,7 @@ local function isMetatableProtected(target: Instance|any): boolean
 end
 
 --checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
-local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> ()?): boolean
+local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> ()?): (boolean, boolean)
 	--get what is expected to be __namecall
 	local __nc = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end))
 
@@ -164,21 +164,22 @@ local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> (
 	--if it stack overflowed, it was an instance. Or, if it said invalid arg, it's also an instance. Only instances have __namecall.
 	if (errorMsg:match("C stack overflow") or errorMsg:match("missing argument #1 %(Instance expected%)")) then
 		return true
-	elseif (errorMsg:match("attempt to call missing method ['%w_]+ of table")) then --it was a table
-		return false
 	elseif (suspiciousMatch and #suspiciousMatch > 5) then
 		if (onHiddenMetamethodDetected) then onHiddenMetamethodDetected(suspiciousMatch) end
-		return true
+		return true, true
 	end
+
+	return false
 end
 
 --Returns the real metatable of <code>target</code>, bypassing any metamethods.
 local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetamethodDetected: (string) -> ()?): {[any]: any}
 	table.clear(results)
-	
+
 	local metatable do --get the metatable
 		--if its an instance, return its core metamethods (__index, __newindex, __type, __metatable and __namecall)
-		local isInstance = isInstance(target, onHiddenMetamethodDetected)
+		local isInstance, hideMetamethods = isInstance(target, onHiddenMetamethodDetected)
+
 		if (isInstance and typeof(isInstance) == "boolean") then
 			metatable = {
 				__index = select(2, xpcall(function() return target[getkey()] end, function() return debug.info(2, "f") end)),
@@ -189,12 +190,10 @@ local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetam
 			}
 
 			--if the expected functions aren't the expected functions, leave them out
-			for k, v in metatable do
-				if (k ~= "__type" and k ~= "__metatable" and k ~= "__tostring" and typeof(v) ~= "function") then
-					metatable[k] = nil
-				elseif (k ~= "__type" and k ~= "__metatable" and k ~= "__tostring" and select(2, pcall(v)):match("%u?%l?%d[%u%l%d_]+")) then
-					metatable[k] = nil
-				end
+			if (hideMetamethods) then
+				metatable.__index = nil
+				metatable.__newindex = nil
+				metatable.__namecall = nil
 			end
 
 		elseif (typeof(target) == "table" and typeof(isInstance) == "boolean") then --table or proxy
