@@ -1,9 +1,23 @@
 --module by 12345koip
 --retrieves a metatable regardless of the __metatable field
 --view full license on the GitHub
-
 --temporary results table to store retrieved metamethods
 local results = {}
+
+--type function for result
+type function getReturnValue(T)
+	if (not T:is("table") and not T:is("Instance")) then
+		return types.newtable()
+	elseif (T:is("Instance")) then
+		local newtbl = types.newtable()
+		newtbl:setproperty(types.string, types.newfunction())
+		return newtbl
+	elseif T:is("table") then
+		return types.newtable()
+	else
+		return types.singleton(nil)
+	end
+end
 
 --userdata object + metamethods setting up
 local userdata, metamethodRetrievers, userdataMt do
@@ -127,6 +141,13 @@ local function getkey()
 	return password
 end
 
+--instance metamethod detectors
+local instMetamethodDetectors = {
+	__index = function(t) return t[getkey()] end,
+	__newindex = function(t) t[getkey()] = nil end,
+	__namecall = function(t) return t[getkey()](t) end
+}
+
 --checks to see if a table has a protected metatable or not
 local function isMetatableProtected(target: Instance|any): boolean
 	--attempt to overwrite the metatable with another value. If it errors, the metatable is protected.
@@ -145,10 +166,10 @@ local function isMetatableProtected(target: Instance|any): boolean
 end
 
 --checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
-local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> ()?): (boolean, boolean)
+local function isInstance(target: any, onModdedMetamethodDetected: (string) -> ()?): (boolean, boolean)
 	--get what is expected to be __namecall
-	local __nc = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end))
-
+	local __nc = select(2, xpcall(function() return target[getkey()] end, function() return debug.info(2, "f") end))
+	
 	--doesn't matter if __namecall is hooked, wrapping it 198 times and calling it again will C stack overflow if it is hooked
 	--tables don't have __namecall so that can't be hooked either
 	for i = 1, 198, 1 do
@@ -159,13 +180,22 @@ local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> (
 	local errorMsg = select(2, pcall(__nc))
 
 	--check for a suspicious error message - detect sethiddenstack
-	local suspiciousMatch = errorMsg:match("%u?%l?%d[%u%l%d_]+")
+	local s, suspiciousMatch = pcall(function() --secondary wrapped function so dont need to check that :D
+		return errorMsg:match("%u?%l?%d[%u%l%d_]+")
+	end)
+	
+	if (not s and onModdedMetamethodDetected) then --no error message - gotta be hooked
+		onModdedMetamethodDetected("stack retriever is hooked")
+		return true
+	elseif (not s) then
+		return true
+	end
 
 	--if it stack overflowed, it was an instance. Or, if it said invalid arg, it's also an instance. Only instances have __namecall.
 	if (errorMsg:match("C stack overflow") or errorMsg:match("missing argument #1 %(Instance expected%)")) then
 		return true
 	elseif (suspiciousMatch and #suspiciousMatch > 5) then
-		if (onHiddenMetamethodDetected) then onHiddenMetamethodDetected(suspiciousMatch) end
+		if (onModdedMetamethodDetected) then onModdedMetamethodDetected(suspiciousMatch) end
 		return true, true
 	end
 
@@ -173,12 +203,12 @@ local function isInstance(target: any, onHiddenMetamethodDetected: (string) -> (
 end
 
 --Returns the real metatable of <code>target</code>, bypassing any metamethods.
-local function copyrawmetatable(target: Instance|any|{[any]: any}, onHiddenMetamethodDetected: (string) -> ()?): {[any]: any}
+local function copyrawmetatable<T>(target: T, onModdedMetamethodDetected: (string) -> ()?): getReturnValue<T>
 	table.clear(results)
 
 	local metatable do --get the metatable
 		--if its an instance, return its core metamethods (__index, __newindex, __type, __metatable and __namecall)
-		local isInstance, hideMetamethods = isInstance(target, onHiddenMetamethodDetected)
+		local isInstance, hideMetamethods = isInstance(target, onModdedMetamethodDetected)
 
 		if (isInstance and typeof(isInstance) == "boolean") then
 			metatable = {
