@@ -6,12 +6,8 @@ local results = {}
 
 --type function for result
 type function getReturnValue(T)
-	if (not T:is("table") and not T:is("Instance")) then
+	if (not T:is("table")) then
 		return types.newtable()
-	elseif (T:is("Instance")) then
-		local newtbl = types.newtable()
-		newtbl:setproperty(types.string, types.newfunction())
-		return newtbl
 	elseif T:is("table") then
 		return types.newtable()
 	else
