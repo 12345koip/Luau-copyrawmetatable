@@ -210,7 +210,7 @@ local function copyrawmetatable<T>(target: T, onModdedMetamethodDetected: (strin
 			metatable = {
 				__index = select(2, xpcall(function() return target[getkey()] end, function() return debug.info(2, "f") end)),
 				__newindex = select(2, xpcall(function() target[getkey()] = nil end, function() return debug.info(2, "f") end)),
-				__namecall = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end)),
+				__namecall = select(2, xpcall(function() return target:iweurfhbvhcgyudsiewhjrebdf_yes_i_just_ran_my_hand_over_my_keyboard() end, function() return debug.info(2, "f") end)),
 				__type = typeof(target),
 				__metatable = getmetatable(target)
 			}
