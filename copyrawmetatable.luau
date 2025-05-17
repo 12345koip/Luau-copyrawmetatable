@@ -157,7 +157,7 @@ end
 --checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
 local function isInstance(target: any, onModdedMetamethodDetected: (string) -> ()?): (boolean, boolean)
 	--get what is expected to be __namecall
-	local __nc = select(2, xpcall(function() return target[getkey()] end, function() return debug.info(2, "f") end))
+	local __nc = select(2, xpcall(function() return target:ieuedfhjdksierowugfjkdsioreugdfjkoiruegj() end, function() return debug.info(2, "f") end))
 	
 	--doesn't matter if __namecall is hooked, wrapping it 198 times and calling it again will C stack overflow if it is hooked
 	--tables don't have __namecall so that can't be hooked either
