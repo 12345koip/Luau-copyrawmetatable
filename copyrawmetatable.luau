@@ -137,13 +137,6 @@ local function getkey()
 	return password
 end
 
---instance metamethod detectors
-local instMetamethodDetectors = {
-	__index = function(t) return t[getkey()] end,
-	__newindex = function(t) t[getkey()] = nil end,
-	__namecall = function(t) return t[getkey()](t) end
-}
-
 --checks to see if a table has a protected metatable or not
 local function isMetatableProtected(target: Instance|any): boolean
 	--attempt to overwrite the metatable with another value. If it errors, the metatable is protected.
