@@ -1,6 +1,7 @@
 --module by 12345koip
 --retrieves a metatable regardless of the __metatable field
 --view full license on the GitHub
+
 --temporary results table to store retrieved metamethods
 local results = {}
 
@@ -156,23 +157,23 @@ end
 
 --checks to see if the given target is an <code>Instance</code>, bypassing the <code>__type</code> metamethod
 local function isInstance(target: any, onModdedMetamethodDetected: (string) -> ()?): (boolean, boolean)
-	--get what is expected to be __namecall
-	local __nc = select(2, xpcall(function() return target:ieuedfhjdksierowugfjkdsioreugdfjkoiruegj() end, function() return debug.info(2, "f") end))
+	--get what is expected to be __index
+	local __in = select(2, xpcall(function() return target[getkey()](target) end, function() return debug.info(2, "f") end))
 	
-	--doesn't matter if __namecall is hooked, wrapping it 198 times and calling it again will C stack overflow if it is hooked
-	--tables don't have __namecall so that can't be hooked either
+	--doesn't matter if __index is hooked, wrapping it 198 times and calling it again will C stack overflow if it is hooked
+	--tables don't have __index so that can't be hooked either
 	for i = 1, 198, 1 do
-		__nc = coroutine.wrap(__nc)
+		__in = coroutine.wrap(__in)
 	end
 
 	--try to call it again
-	local errorMsg = select(2, pcall(__nc))
+	local errorMsg = select(2, pcall(__in))
 
 	--check for a suspicious error message - detect sethiddenstack
 	local s, suspiciousMatch = pcall(function() --secondary wrapped function so dont need to check that :D
 		return errorMsg:match("%u?%l?%d[%u%l%d_]+")
 	end)
-	
+
 	if (not s and onModdedMetamethodDetected) then --no error message - gotta be hooked
 		onModdedMetamethodDetected("stack retriever is hooked")
 		return true
@@ -215,7 +216,7 @@ local function copyrawmetatable<T>(target: T, onModdedMetamethodDetected: (strin
 				metatable.__namecall = nil
 			end
 
-		elseif (typeof(target) == "table" and typeof(isInstance) == "boolean") then --table or proxy
+		elseif (type(target) == "table" and typeof(isInstance) == "boolean") then --table or proxy
 			--check if the metatable is protected. if not, just return it like that
 			if (not isMetatableProtected(target)) then
 				return getmetatable(target)
